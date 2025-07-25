@@ -37,12 +37,13 @@
             max-width: 800px; /* But not larger than original game width */
             aspect-ratio: 4 / 3; /* Maintain 4:3 aspect ratio (800/600) */
             height: auto; /* Let height adjust based on aspect ratio */
+            position: relative; /* For absolute positioning of controls */
         }
 
         canvas {
             background-color: #87CEEB;
             display: block;
-            border-radius: 4px;
+            border-radius: 44px;
             touch-action: none;
             /* Fill the container */
             width: 100%;
@@ -84,6 +85,48 @@
             background-color: rgba(255, 255, 255, 0.1);
             border-radius: 5px;
         }
+
+        /* On-screen controls styling */
+        #on-screen-controls {
+            position: absolute;
+            bottom: 20px; /* Adjust as needed */
+            left: 0;
+            right: 0;
+            padding: 0 20px;
+            display: flex; /* Initially visible */
+            justify-content: space-between;
+            align-items: flex-end;
+            z-index: 50; /* Above canvas, below clear screen */
+            /* pointer-events is controlled by JS now */
+        }
+
+        #left-right-buttons {
+            display: flex;
+            gap: 15px; /* Space between left and right buttons */
+        }
+
+        .control-button {
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: 2px solid #fff;
+            border-radius: 50%; /* Make them round */
+            width: 70px; /* Size for touch targets */
+            height: 70px;
+            font-size: 1.8em;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: background-color 0.1s ease, transform 0.1s ease;
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .control-button:active {
+            background-color: rgba(0, 0, 0, 0.8);
+            transform: scale(0.95);
+        }
     </style>
 </head>
 <body>
@@ -92,20 +135,33 @@
             <span id="stage-display">Stage: 1</span>
         </div>
         <canvas id="gameCanvas"></canvas>
+
+        <!-- On-screen control buttons -->
+        <div id="on-screen-controls">
+            <div id="left-right-buttons">
+                <button id="leftButton" class="control-button">◀</button>
+                <button id="rightButton" class="control-button">▶</button>
+            </div>
+            <button id="jumpButton" class="control-button">Jump</button>
+        </div>
+
         <div id="game-clear-screen" style="display:none;">
             <p>ゲームクリア！</p>
             <p>Enterキーで再スタート</p>
         </div>
     </div>
 
-    <!-- Tone.js library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
-
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const stageDisplay = document.getElementById('stage-display');
         const gameClearScreen = document.getElementById('game-clear-screen');
+
+        // Get on-screen control elements
+        const leftButton = document.getElementById('leftButton');
+        const rightButton = document.getElementById('rightButton');
+        const jumpButton = document.getElementById('jumpButton');
+        const onScreenControls = document.getElementById('on-screen-controls');
 
         // Internal game world dimensions (fixed, for game logic)
         const GAME_WORLD_WIDTH = 800;
@@ -121,7 +177,11 @@
         const GAME_STATE_CLEAR = 1;
 
         let gameState = GAME_STATE_PLAYING;
-        let bgmStarted = false; // Flag to track if BGM has started
+        // True if the current input mode is keyboard, false for touch/mouse, or gamepad
+        let inputMode = 'touch'; // 'touch', 'keyboard', 'gamepad'
+
+        // Gamepad related variables
+        let gamepadIndex = null; // Stores the index of the connected gamepad
 
         // Function to update canvas drawing dimensions
         function updateCanvasDrawingSize() {
@@ -134,34 +194,6 @@
         updateCanvasDrawingSize();
         window.addEventListener('resize', updateCanvasDrawingSize);
 
-        // Tone.js BGM setup
-        const synth = new Tone.Synth().toDestination();
-        const melody = [
-            "C4", "E4", "G4", "C5",
-            "G4", "E4", "C4", null,
-            "D4", "F4", "A4", "D5",
-            "A4", "F4", "D4", null
-        ];
-        const sequence = new Tone.Sequence((time, note) => {
-            if (note) {
-                synth.triggerAttackRelease(note, "8n", time);
-            }
-        }, melody, "4n"); // Play each note for a quarter note duration
-
-        sequence.loop = true;
-        sequence.playbackRate = 1.0; // Normal speed
-
-        function startBGM() {
-            if (!bgmStarted) {
-                // Tone.start() must be called from a user gesture
-                Tone.start().then(() => {
-                    sequence.start(0); // Start the sequence from the beginning
-                    Tone.Transport.start(); // Start the transport (global clock)
-                    bgmStarted = true;
-                    console.log("BGM started!");
-                }).catch(e => console.error("Failed to start Tone.js:", e));
-            }
-        }
 
         class Vec2 {
             constructor(x, y) {
@@ -787,7 +819,7 @@
 
                 this.currentStageIndex = index;
                 stageDisplay.textContent = `Stage: ${this.currentStageIndex + 1}`;
-                gameClearScreen.style.display = 'none';
+                gameClearScreen.style.display = 'none'; // Ensure clear screen is hidden
 
                 const stageConfig = this.BASE_STAGE_PATTERNS[index % this.NUM_BASE_PATTERNS];
 
@@ -819,136 +851,216 @@
                 this.player.vel = new Vec2(0, 0);
                 this.player.acc = new Vec2(0, 0);
                 this.player.onGround = false;
+                gameClearScreen.style.display = 'none'; // Ensure clear screen is hidden on reset
             }
         }
 
         const gameManager = new GameManager();
         const keysPressed = {};
-        let isMouseDown = false;
+        
+        // Function to control button visibility and pointer events
+        function setButtonVisibility(visible) {
+            if (visible) {
+                onScreenControls.style.display = 'flex';
+                onScreenControls.style.pointerEvents = 'auto'; // Enable pointer events
+            } else {
+                onScreenControls.style.display = 'none';
+                onScreenControls.style.pointerEvents = 'none'; // Disable pointer events
+            }
+        }
 
+        // Initial state: buttons visible
+        setButtonVisibility(true);
+
+        // --- Gamepad Event Listeners ---
+        window.addEventListener("gamepadconnected", (e) => {
+            console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+                e.gamepad.index, e.gamepad.id,
+                e.gamepad.buttons.length, e.gamepad.axes.length);
+            gamepadIndex = e.gamepad.index;
+            inputMode = 'gamepad';
+            setButtonVisibility(false); // Hide on-screen buttons when gamepad connects
+        });
+
+        window.addEventListener("gamepaddisconnected", (e) => {
+            console.log("Gamepad disconnected from index %d: %s",
+                e.gamepad.index, e.gamepad.id);
+            if (gamepadIndex === e.gamepad.index) {
+                gamepadIndex = null;
+                inputMode = 'touch'; // Revert to touch mode if gamepad disconnected
+                setButtonVisibility(true); // Show on-screen buttons
+            }
+        });
+
+        // --- Keyboard Event Listeners ---
         document.addEventListener('keydown', (e) => {
-            startBGM(); // Try to start BGM on first keydown
+            if (inputMode !== 'keyboard') { // Only switch mode if not already in keyboard mode
+                inputMode = 'keyboard';
+                setButtonVisibility(false); // Hide buttons
+            }
             keysPressed[e.key] = true;
             if (gameState === GAME_STATE_PLAYING) {
                 if (e.key === 'ArrowUp' || e.key === 'w') {
                     gameManager.player.jump();
                 }
-                if (e.key === ' ' && e.shiftKey) {
+                if (e.key === ' ' && e.shiftKey) { // Debug next stage
                     gameManager.nextStage();
                 }
             } else if (gameState === GAME_STATE_CLEAR) {
-                if (e.key === 'Enter' || e.key === ' ') {
-                    gameManager.currentStageIndex = 0;
-                    gameState = GAME_STATE_PLAYING;
-                    gameManager.loadStage(gameManager.currentStageIndex);
-                }
+                gameClearScreen.style.display = 'none'; // Hide clear screen immediately on restart attempt
+                gameManager.currentStageIndex = 0;
+                gameState = GAME_STATE_PLAYING;
+                gameManager.loadStage(gameManager.currentStageIndex);
             }
         });
 
         document.addEventListener('keyup', (e) => {
             keysPressed[e.key] = false;
+            // Input mode is not changed on keyup, only on keydown or touch/gamepad input
         });
 
-        canvas.addEventListener('mousedown', (e) => {
-            startBGM(); // Try to start BGM on first mousedown
-            e.preventDefault();
-            isMouseDown = true;
+        // --- On-screen Button Event Handlers ---
+        // Function to handle button press (both mouse and touch)
+        function handleButtonPress(key) {
             if (gameState === GAME_STATE_PLAYING) {
-                const mouseX = e.clientX;
-                const canvasRect = canvas.getBoundingClientRect();
-                const relativeX = mouseX - canvasRect.left;
-
-                if (relativeX < canvas.width / 2) {
-                    keysPressed['ArrowLeft'] = true;
-                    keysPressed['ArrowRight'] = false;
-                } else {
-                    keysPressed['ArrowRight'] = true;
-                    keysPressed['ArrowLeft'] = false;
+                // If a button is pressed, assume touch mode and show buttons
+                if (inputMode !== 'touch') {
+                    inputMode = 'touch';
+                    setButtonVisibility(true); // Show buttons
                 }
-                gameManager.player.jump();
+                keysPressed[key] = true;
+                if (key === 'ArrowUp') { // Only jump on press, not continuous hold
+                    gameManager.player.jump();
+                }
+            }
+        }
+
+        // Function to handle button release (both mouse and touch)
+        function handleButtonRelease(key) {
+            if (gameState === GAME_STATE_PLAYING) {
+                keysPressed[key] = false;
+            }
+        }
+
+        // Attach event listeners for each on-screen button
+        // Left Button
+        leftButton.addEventListener('mousedown', () => handleButtonPress('ArrowLeft'));
+        leftButton.addEventListener('mouseup', () => handleButtonRelease('ArrowLeft'));
+        leftButton.addEventListener('mouseleave', () => handleButtonRelease('ArrowLeft')); // If mouse drags off button
+        leftButton.addEventListener('touchstart', (e) => { e.preventDefault(); handleButtonPress('ArrowLeft'); }, { passive: false });
+        leftButton.addEventListener('touchend', (e) => { e.preventDefault(); handleButtonRelease('ArrowLeft'); }, { passive: false });
+
+        // Right Button
+        rightButton.addEventListener('mousedown', () => handleButtonPress('ArrowRight'));
+        rightButton.addEventListener('mouseup', () => handleButtonRelease('ArrowRight'));
+        rightButton.addEventListener('mouseleave', () => handleButtonRelease('ArrowRight'));
+        rightButton.addEventListener('touchstart', (e) => { e.preventDefault(); handleButtonPress('ArrowRight'); }, { passive: false });
+        rightButton.addEventListener('touchend', (e) => { e.preventDefault(); handleButtonRelease('ArrowRight'); }, { passive: false });
+
+        // Jump Button
+        jumpButton.addEventListener('mousedown', () => handleButtonPress('ArrowUp'));
+        jumpButton.addEventListener('mouseup', () => handleButtonRelease('ArrowUp'));
+        jumpButton.addEventListener('mouseleave', () => handleButtonRelease('ArrowUp'));
+        jumpButton.addEventListener('touchstart', (e) => { e.preventDefault(); handleButtonPress('ArrowUp'); }, { passive: false });
+        jumpButton.addEventListener('touchend', (e) => { e.preventDefault(); handleButtonRelease('ArrowUp'); }, { passive: false });
+
+        // --- Canvas Mouse/Touch Listeners (for re-showing buttons or game clear) ---
+        canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            if (gameState === GAME_STATE_PLAYING) {
+                // If not in touch mode, a click on canvas should switch to touch mode and show buttons
+                if (inputMode !== 'touch') {
+                    inputMode = 'touch';
+                    setButtonVisibility(true); // Show buttons
+                }
             } else if (gameState === GAME_STATE_CLEAR) {
+                gameClearScreen.style.display = 'none'; // Hide clear screen immediately on restart attempt
                 gameManager.currentStageIndex = 0;
                 gameState = GAME_STATE_PLAYING;
                 gameManager.loadStage(gameManager.currentStageIndex);
-            }
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            e.preventDefault();
-            if (gameState === GAME_STATE_PLAYING && isMouseDown) {
-                const mouseX = e.clientX;
-                const canvasRect = canvas.getBoundingClientRect();
-                const relativeX = mouseX - canvasRect.left;
-
-                if (relativeX < canvas.width / 2) {
-                    keysPressed['ArrowLeft'] = true;
-                    keysPressed['ArrowRight'] = false;
-                } else {
-                    keysPressed['ArrowRight'] = true;
-                    keysPressed['ArrowLeft'] = false;
-                }
             }
         });
 
         canvas.addEventListener('mouseup', (e) => {
             e.preventDefault();
-            isMouseDown = false;
-            if (gameState === GAME_STATE_PLAYING) {
-                keysPressed['ArrowLeft'] = false;
-                keysPressed['ArrowRight'] = false;
-            }
+            // No specific action needed on mouseup for input mode
         });
 
         canvas.addEventListener('touchstart', (e) => {
-            startBGM(); // Try to start BGM on first touchstart
             e.preventDefault();
             if (gameState === GAME_STATE_PLAYING) {
-                const touchX = e.touches[0].clientX;
-                const canvasRect = canvas.getBoundingClientRect();
-                const relativeX = touchX - canvasRect.left;
-
-                if (relativeX < canvas.width / 2) {
-                    keysPressed['ArrowLeft'] = true;
-                    keysPressed['ArrowRight'] = false;
-                } else {
-                    keysPressed['ArrowRight'] = true;
-                    keysPressed['ArrowLeft'] = false;
+                // If not in touch mode, a touch on canvas should switch to touch mode and show buttons
+                if (inputMode !== 'touch') {
+                    inputMode = 'touch';
+                    setButtonVisibility(true); // Show buttons
                 }
-                
-                gameManager.player.jump();
             } else if (gameState === GAME_STATE_CLEAR) {
+                gameClearScreen.style.display = 'none'; // Hide clear screen immediately on restart attempt
                 gameManager.currentStageIndex = 0;
                 gameState = GAME_STATE_PLAYING;
                 gameManager.loadStage(gameManager.currentStageIndex);
             }
         }, { passive: false });
 
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
-            if (gameState === GAME_STATE_PLAYING) {
-                const touchX = e.touches[0].clientX;
-                const canvasRect = canvas.getBoundingClientRect();
-                const relativeX = touchX - canvasRect.left;
-
-                if (relativeX < canvas.width / 2) {
-                    keysPressed['ArrowLeft'] = true;
-                    keysPressed['ArrowRight'] = false;
-                } else {
-                    keysPressed['ArrowRight'] = true;
-                    keysPressed['ArrowLeft'] = false;
-                }
-            }
-        }, { passive: false });
-
         canvas.addEventListener('touchend', (e) => {
             e.preventDefault();
-            if (gameState === GAME_STATE_PLAYING) {
-                keysPressed['ArrowLeft'] = false;
-                keysPressed['ArrowRight'] = false;
-            }
+            // No specific action needed on touchend for input mode
         });
 
+        // --- Gamepad Polling Function ---
+        function pollGamepads() {
+            if (gamepadIndex !== null) {
+                const gamepads = navigator.getGamepads();
+                const gamepad = gamepads[gamepadIndex];
+
+                if (gamepad) {
+                    // Reset keyboard/touch inputs if gamepad is active
+                    if (inputMode !== 'gamepad') {
+                        inputMode = 'gamepad';
+                        setButtonVisibility(false);
+                    }
+
+                    // Map gamepad axes for horizontal movement (Left Stick X-axis or D-pad)
+                    const leftStickX = gamepad.axes[0]; // Standard for left stick horizontal
+                    const dPadLeft = gamepad.buttons[14]; // D-pad Left (common)
+                    const dPadRight = gamepad.buttons[15]; // D-pad Right (common)
+
+                    keysPressed['ArrowLeft'] = (leftStickX < -0.5 || (dPadLeft && dPadLeft.pressed));
+                    keysPressed['ArrowRight'] = (leftStickX > 0.5 || (dPadRight && dPadRight.pressed));
+
+                    // Map gamepad button for jump (e.g., A button on Xbox, Cross on PlayStation)
+                    const jumpButton = gamepad.buttons[0]; // Common 'A' or 'X' button
+
+                    // Trigger jump only on press, not continuous hold
+                    if (jumpButton && jumpButton.pressed && !gamepad.lastJumpButtonPressed) {
+                        gameManager.player.jump();
+                    }
+                    gamepad.lastJumpButtonPressed = (jumpButton && jumpButton.pressed);
+
+                    // Handle game clear screen restart with gamepad (e.g., Start button or A button)
+                    const startButton = gamepad.buttons[9]; // Common Start button
+                    if (gameState === GAME_STATE_CLEAR && (startButton && startButton.pressed) && !gamepad.lastStartButtonPressed) {
+                         gameClearScreen.style.display = 'none';
+                         gameManager.currentStageIndex = 0;
+                         gameState = GAME_STATE_PLAYING;
+                         gameManager.loadStage(gameManager.currentStageIndex);
+                    }
+                    gamepad.lastStartButtonPressed = (startButton && startButton.pressed);
+
+                } else {
+                    // Gamepad was connected but is no longer available (e.g., unplugged)
+                    gamepadIndex = null;
+                    inputMode = 'touch';
+                    setButtonVisibility(true);
+                }
+            }
+        }
+
+
+        // Game Loop
         function gameLoop() {
+            pollGamepads(); // Check gamepad input every frame
+
             if (gameState === GAME_STATE_PLAYING) {
                 ctx.fillStyle = '#87CEEB';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
