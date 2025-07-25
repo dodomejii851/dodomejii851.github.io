@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ウェブ版Pygame風ゲーム</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            overflow: hidden; /* スクロールバーを非表示にする */
+        }
+
+        #game-container {
+            border: 2px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+        }
+
+        canvas {
+            background-color: #87CEEB; /* 空色 */
+            display: block;
+            border-radius: 4px;
+        }
+
+        #game-info {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 10px;
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        #game-clear-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            text-align: center;
+            z-index: 100;
+            border-radius: 8px;
+        }
+
+        #game-clear-screen p {
+            margin: 10px 0;
+            padding: 10px 20px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="game-info">
+            <span id="stage-display">Stage: 1</span>
+        </div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="game-clear-screen" style="display:none;">
+            <p>ゲームクリア！</p>
+            <p>Enterキーで再スタート</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const stageDisplay = document.getElementById('stage-display');
+        const gameClearScreen = document.getElementById('game-clear-screen');
+
+        // 画面サイズ物理演算の定数を定義
+        const WIDTH = canvas.width;
+        const HEIGHT = canvas.height;
+        const ACC = 0.5;  // 加速度 (重力と水平移動の速さ)
+        const FRIC = -0.15; // 摩擦 (負の値で速度を減衰させる)
+        const PLAYER_START_Y_OFFSET = 50; // プレイヤー開始時のy
+
+        // ゲームの状態定数
+        const GAME_STATE_PLAYING = 0;
+        const GAME_STATE_CLEAR = 1;
+
+        let gameState = GAME_STATE_PLAYING;
+
+        // ベクトルクラスの簡易実装
+        class Vec2 {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+            }
+            add(other) {
+                return new Vec2(this.x + other.x, this.y + other.y);
+            }
+            sub(other) {
+                return new Vec2(this.x - other.x, this.y - other.y);
+            }
+            mul(scalar) {
+                return new Vec2(this.x * scalar, this.y * scalar);
+            }
+            copy() {
+                return new Vec2(this.x, this.y);
+            }
+        }
+
+        // プレイヤーのクラス定義
+        class Player {
+            constructor() {
+                this.width = 30;
+                this.height = 30;
+                this.color = '#3DFFD0'; // 明るい青緑
+                this.pos = new Vec2(0, 0); // 初期位置はステージロード時に設定
+                this.vel = new Vec2(0, 0);
+                this.acc = new Vec2(0, 0);
+                this.onGround = false;
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.pos.x - this.width / 2, this.pos.y - this.height / 2, this.width, this.height);
+            }
+
+            handleKeys(keysPressed) {
+                this.acc.x = 0;
+                if (keysPressed['ArrowLeft'] || keysPressed['a']) {
+                    this.acc.x = -ACC * 1.5;
+                }
+                if (keysPressed['ArrowRight'] || keysPressed['d']) {
+                    this.acc.x = ACC * 1.5;
+                }
+            }
+
+            jump() {
+                if (this.onGround) {
+                    this.vel.y = -10;
+                    this.onGround = false;
+                }
+            }
+
+            update(platforms, spikes, gameManager, keysPressed) {
+                this.handleKeys(keysPressed);
+                this.acc.x += this.vel.x * FRIC;
+                this.acc.y = ACC;
+
+                // X軸の移動と衝突検出
+                this.vel.x += this.acc.x;
+                this.pos.x += this.vel.x + 0.5 * this.acc.x;
+
+                // 画面の左右端の境界処理 (X軸)
+                if (this.pos.x < this.width / 2) {
+                    this.pos.x = this.width / 2;
+                    this.vel.x = 0;
+                }
+                if (this.pos.x > WIDTH - this.width / 2) {
+                    gameManager.nextStage();
+                    return;
+                }
+
+                // 水平方向のプラットフォーム衝突
+                platforms.forEach(platform => {
+                    if (this.checkCollision(this.pos.x, this.pos.y, platform)) {
+                        if (this.vel.x > 0) { // 右に移動中にプラットフォームの左側に衝突
+                            this.pos.x = platform.x - this.width / 2;
+                        } else if (this.vel.x < 0) { // 左に移動中にプラットフォームの右側に衝突
+                            this.pos.x = platform.x + platform.width + this.width / 2;
+                        }
+                        this.vel.x = 0;
+                    }
+                });
+
+                // Y軸の移動と衝突検出
+                this.vel.y += this.acc.y;
+                this.pos.y += this.vel.y + 0.5 * this.acc.y;
+                
+                this.onGround = false;
+                platforms.forEach(platform => {
+                    if (this.checkCollision(this.pos.x, this.pos.y, platform)) {
+                        if (this.vel.y > 0) { // 落下中にプラットフォームの上面に衝突 (着地)
+                            this.pos.y = platform.y - this.height / 2;
+                            this.vel.y = 0;
+                            this.onGround = true;
+                        } else if (this.vel.y < 0) { // 上昇中にプラットフォームの下面に衝突 (頭をぶつける)
+                            this.pos.y = platform.y + platform.height + this.height / 2;
+                            this.vel.y = 0;
+                        }
+                    }
+                });
+
+                // 棘との衝突検出
+                spikes.forEach(spike => {
+                    if (this.checkCollision(this.pos.x, this.pos.y, spike)) {
+                        gameManager.resetCurrentStage();
+                        return;
+                    }
+                });
+
+                // 画面下部への落下検出
+                if (this.pos.y > HEIGHT + this.height / 2) {
+                    gameManager.resetCurrentStage();
+                    return;
+                }
+            }
+
+            // AABB衝突検出
+            checkCollision(playerX, playerY, obj) {
+                const playerLeft = playerX - this.width / 2;
+                const playerRight = playerX + this.width / 2;
+                const playerTop = playerY - this.height / 2;
+                const playerBottom = playerY + this.height / 2;
+
+                const objLeft = obj.x;
+                const objRight = obj.x + obj.width;
+                const objTop = obj.y;
+                const objBottom = obj.y + obj.height;
+
+                return playerRight > objLeft && playerLeft < objRight &&
+                       playerBottom > objTop && playerTop < objBottom;
+            }
+        }
+
+        // プラットフォームのクラス定義
+        class Platform {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = '#000000'; // 黒
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        // 棘のクラス定義
+        class Spike {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = '#FF0000'; // 赤色
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        // ゲーム管理クラス
+        class GameManager {
+            constructor() {
+                this.player = new Player();
+                this.platforms = [];
+                this.spikes = [];
+                this.currentStageIndex = 0;
+                this.playerStartPosCurrentStage = new Vec2(0, 0);
+
+                this.BASE_STAGE_PATTERNS = [
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 150, 20],
+                            [200, HEIGHT - 100, 80, 20],
+                            [400, HEIGHT - 150, 100, 20],
+                            [550, HEIGHT - 20, 250, 20]
+                        ],
+                        spikes: [
+                            [150, HEIGHT - 20, 100, 20],
+                            [300, HEIGHT - 20, 200, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, WIDTH, 20],
+                            [100, HEIGHT - 100, 150, 20],
+                            [300, HEIGHT - 180, 120, 20],
+                            [550, HEIGHT - 100, 100, 20],
+                            [700, HEIGHT - 200, 80, 20]
+                        ],
+                        spikes: [
+                            [200, HEIGHT - 40, 50, 20],
+                            [400, HEIGHT - 140, 50, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, WIDTH, 20],
+                            [50, HEIGHT - 150, 100, 20],
+                            [250, HEIGHT - 250, 150, 20],
+                            [450, HEIGHT - 150, 100, 20],
+                            [600, HEIGHT - 300, 180, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 50, 20],
+                            [300, HEIGHT - 200, 50, 20],
+                            [650, HEIGHT - 40, 50, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 100, 20],
+                            [200, HEIGHT - 20, 100, 20],
+                            [400, HEIGHT - 20, 100, 20],
+                            [600, HEIGHT - 20, 200, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 20, 100, 20],
+                            [300, HEIGHT - 20, 100, 20],
+                            [500, HEIGHT - 20, 100, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 100, 20],
+                            [150, HEIGHT - 80, 100, 20],
+                            [300, HEIGHT - 140, 100, 20],
+                            [450, HEIGHT - 200, 100, 20],
+                            [600, HEIGHT - 260, 150, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 20, 20],
+                            [200, HEIGHT - 100, 20, 20],
+                            [350, HEIGHT - 160, 20, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 150, 20],
+                            [200, HEIGHT - 100, 100, 20],
+                            [350, HEIGHT - 20, 150, 20],
+                            [550, HEIGHT - 100, 100, 20],
+                            [700, HEIGHT - 180, 100, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 50, 20],
+                            [225, HEIGHT - 120, 50, 20],
+                            [400, HEIGHT - 40, 50, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 100, 20],
+                            [150, HEIGHT - 100, 100, 20],
+                            [300, HEIGHT - 20, 100, 20],
+                            [450, HEIGHT - 100, 100, 20],
+                            [600, HEIGHT - 20, 200, 20]
+                        ],
+                        spikes: [
+                            [175, HEIGHT - 120, 50, 20],
+                            [325, HEIGHT - 40, 50, 20],
+                            [475, HEIGHT - 120, 50, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 100, 20],
+                            [150, HEIGHT - 80, 80, 20],
+                            [280, HEIGHT - 140, 80, 20],
+                            [410, HEIGHT - 200, 80, 20],
+                            [540, HEIGHT - 260, 100, 20],
+                            [680, HEIGHT - 320, 120, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 20, 50, 20],
+                            [230, HEIGHT - 80, 50, 20],
+                            [360, HEIGHT - 140, 50, 20],
+                            [490, HEIGHT - 200, 50, 20],
+                            [620, HEIGHT - 260, 50, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 80, 20],
+                            [150, HEIGHT - 80, 60, 20],
+                            [280, HEIGHT - 140, 60, 20],
+                            [400, HEIGHT - 200, 60, 20],
+                            [550, HEIGHT - 260, 80, 20],
+                            [700, HEIGHT - 320, 100, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 50, 20],
+                            [220, HEIGHT - 100, 60, 20],
+                            [370, HEIGHT - 160, 50, 20],
+                            [480, HEIGHT - 220, 70, 20]
+                        ],
+                        start_pos: new Vec2(40, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 80, 20],
+                            [150, HEIGHT - 100, 50, 20],
+                            [250, HEIGHT - 180, 50, 20],
+                            [350, HEIGHT - 260, 50, 20],
+                            [450, HEIGHT - 180, 50, 20],
+                            [550, HEIGHT - 100, 50, 20],
+                            [650, HEIGHT - 20, 150, 20]
+                        ],
+                        spikes: [
+                            [80, HEIGHT - 20, 70, 20],
+                            [200, HEIGHT - 20, 50, 20],
+                            [300, HEIGHT - 20, 50, 20],
+                            [400, HEIGHT - 20, 50, 20],
+                            [500, HEIGHT - 20, 50, 20],
+                            [600, HEIGHT - 20, 50, 20]
+                        ],
+                        start_pos: new Vec2(40, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 100, 20],
+                            [200, HEIGHT - 100, 80, 20],
+                            [350, HEIGHT - 180, 80, 20],
+                            [500, HEIGHT - 260, 80, 20],
+                            [650, HEIGHT - 20, 150, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 20, 100, 20],
+                            [280, HEIGHT - 20, 70, 20],
+                            [430, HEIGHT - 20, 70, 20],
+                            [580, HEIGHT - 20, 70, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 80, 20],
+                            [100, HEIGHT - 60, 80, 20],
+                            [200, HEIGHT - 100, 80, 20],
+                            [300, HEIGHT - 140, 80, 20],
+                            [400, HEIGHT - 180, 80, 20],
+                            [500, HEIGHT - 220, 80, 20],
+                            [600, HEIGHT - 260, 200, 20]
+                        ],
+                        spikes: [
+                            [80, HEIGHT - 40, 20, 20],
+                            [150, HEIGHT - 80, 20, 20],
+                            [250, HEIGHT - 120, 20, 20],
+                            [350, HEIGHT - 160, 20, 20],
+                            [450, HEIGHT - 200, 20, 20],
+                            [550, HEIGHT - 240, 20, 20]
+                        ],
+                        start_pos: new Vec2(40, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    // ステージ13: 新しい地形 - 浮遊する足場と棘の配置 (完全変更)
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 100, 20], // 開始地点の地面
+                            [150, HEIGHT - 100, 80, 20], // 最初の浮島
+                            [300, HEIGHT - 180, 80, 20], // 2番目の浮島
+                            [450, HEIGHT - 260, 80, 20], // 3番目の浮島
+                            [600, HEIGHT - 340, 100, 20], // 4番目の浮島
+                            [700, HEIGHT - 20, 100, 20] // 最後の地面
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 50, 20], // 地面の棘
+                            [200, HEIGHT - 120, 50, 20], // 最初の浮島の下の棘
+                            [350, HEIGHT - 200, 50, 20], // 2番目の浮島の下の棘
+                            [500, HEIGHT - 280, 50, 20], // 3番目の浮島の下の棘
+                            [650, HEIGHT - 360, 50, 20] // 4番目の浮島の下の棘
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 150, 20],
+                            [200, HEIGHT - 80, 100, 20],
+                            [350, HEIGHT - 140, 100, 20],
+                            [500, HEIGHT - 200, 100, 20],
+                            [650, HEIGHT - 260, 150, 20]
+                        ],
+                        spikes: [
+                            [150, HEIGHT - 40, 50, 20],
+                            [300, HEIGHT - 100, 50, 20],
+                            [450, HEIGHT - 160, 50, 20],
+                            [600, HEIGHT - 220, 50, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 50, 20],
+                            [100, HEIGHT - 80, 50, 20],
+                            [200, HEIGHT - 140, 50, 20],
+                            [300, HEIGHT - 200, 50, 20],
+                            [400, HEIGHT - 260, 50, 20],
+                            [500, HEIGHT - 320, 50, 20],
+                            [600, HEIGHT - 380, 200, 20]
+                        ],
+                        spikes: [
+                            [70, HEIGHT - 40, 30, 20],
+                            [170, HEIGHT - 100, 30, 20],
+                            [270, HEIGHT - 160, 30, 20],
+                            [370, HEIGHT - 220, 30, 20],
+                            [470, HEIGHT - 280, 30, 20],
+                            [570, HEIGHT - 340, 30, 20]
+                        ],
+                        start_pos: new Vec2(25, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 150, 20],
+                            [250, HEIGHT - 100, 100, 20],
+                            [450, HEIGHT - 100, 100, 20],
+                            [650, HEIGHT - 20, 150, 20]
+                        ],
+                        spikes: [
+                            [150, HEIGHT - 20, 100, 20],
+                            [350, HEIGHT - 20, 100, 20],
+                            [550, HEIGHT - 20, 100, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 100, 20],
+                            [150, HEIGHT - 100, 100, 20],
+                            [300, HEIGHT - 180, 100, 20],
+                            [450, HEIGHT - 100, 100, 20],
+                            [600, HEIGHT - 20, 200, 20]
+                        ],
+                        spikes: [
+                            [175, HEIGHT - 120, 50, 20],
+                            [325, HEIGHT - 200, 50, 20],
+                            [475, HEIGHT - 120, 50, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 80, 20],
+                            [80, HEIGHT - 60, 80, 20],
+                            [160, HEIGHT - 100, 80, 20],
+                            [240, HEIGHT - 140, 80, 20],
+                            [320, HEIGHT - 180, 80, 20],
+                            [400, HEIGHT - 220, 80, 20],
+                            [480, HEIGHT - 260, 320, 20]
+                        ],
+                        spikes: [
+                            [80, HEIGHT - 40, 20, 20],
+                            [120, HEIGHT - 80, 20, 20],
+                            [200, HEIGHT - 120, 20, 20],
+                            [280, HEIGHT - 160, 20, 20],
+                            [360, HEIGHT - 200, 20, 20],
+                            [440, HEIGHT - 240, 20, 20]
+                        ],
+                        start_pos: new Vec2(40, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, WIDTH, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 30, 20],
+                            [250, HEIGHT - 40, 30, 20],
+                            [400, HEIGHT - 40, 30, 20],
+                            [550, HEIGHT - 40, 30, 20],
+                            [700, HEIGHT - 40, 30, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    // ステージ20: 新しい地形 - 連続する浮島と棘 (完全再生成)
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 80, 20],    // 開始地点
+                            [150, HEIGHT - 80, 60, 20],   // 最初の浮島
+                            [280, HEIGHT - 140, 60, 20],  // 2番目の浮島
+                            [410, HEIGHT - 200, 60, 20],  // 3番目の浮島
+                            [540, HEIGHT - 260, 80, 20],  // 4番目の浮島
+                            [700, HEIGHT - 320, 100, 20]  // 最後の浮島
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 20, 50, 20],   // 開始地点の棘
+                            [200, HEIGHT - 100, 50, 20],  // 浮島間の棘
+                            [330, HEIGHT - 160, 50, 20],  // 浮島間の棘
+                            [460, HEIGHT - 220, 50, 20],  // 浮島間の棘
+                            [590, HEIGHT - 280, 50, 20]   // 浮島間の棘
+                        ],
+                        start_pos: new Vec2(40, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 80, 20],
+                            [150, HEIGHT - 80, 60, 20],
+                            [300, HEIGHT - 140, 60, 20],
+                            [450, HEIGHT - 200, 60, 20],
+                            [600, HEIGHT - 260, 80, 20],
+                            [700, HEIGHT - 320, 100, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 50, 20],
+                            [220, HEIGHT - 100, 60, 20],
+                            [370, HEIGHT - 160, 50, 20],
+                            [480, HEIGHT - 220, 70, 20]
+                        ],
+                        start_pos: new Vec2(40, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 50, 20],
+                            [100, HEIGHT - 20, 50, 20],
+                            [200, HEIGHT - 20, 50, 20],
+                            [300, HEIGHT - 20, 50, 20],
+                            [400, HEIGHT - 20, 50, 20],
+                            [500, HEIGHT - 20, 50, 20],
+                            [600, HEIGHT - 20, 50, 20],
+                            [700, HEIGHT - 20, 100, 20]
+                        ],
+                        spikes: [
+                            [50, HEIGHT - 20, 50, 20],
+                            [150, HEIGHT - 20, 50, 20],
+                            [250, HEIGHT - 20, 50, 20],
+                            [350, HEIGHT - 20, 50, 20],
+                            [450, HEIGHT - 20, 50, 20],
+                            [550, HEIGHT - 20, 50, 20],
+                            [650, HEIGHT - 20, 50, 20]
+                        ],
+                        start_pos: new Vec2(25, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 50, 20],
+                            [100, HEIGHT - 120, 50, 20],
+                            [200, HEIGHT - 220, 50, 20],
+                            [300, HEIGHT - 320, 50, 20],
+                            [400, HEIGHT - 220, 50, 20],
+                            [500, HEIGHT - 120, 50, 20],
+                            [600, HEIGHT - 20, 200, 20]
+                        ],
+                        spikes: [
+                            [50, HEIGHT - 20, 50, 20],
+                            [150, HEIGHT - 20, 50, 20],
+                            [250, HEIGHT - 20, 50, 20],
+                            [350, HEIGHT - 20, 50, 20],
+                            [450, HEIGHT - 20, 50, 20],
+                            [550, HEIGHT - 20, 50, 20]
+                        ],
+                        start_pos: new Vec2(25, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, WIDTH, 20],
+                            [0, HEIGHT - 180, WIDTH, 20]
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 50, 20],
+                            [150, HEIGHT - 40, 50, 20],
+                            [250, HEIGHT - 40, 50, 20],
+                            [350, HEIGHT - 40, 50, 20],
+                            [450, HEIGHT - 40, 50, 20],
+                            [550, HEIGHT - 40, 50, 20],
+                            [650, HEIGHT - 40, 50, 20],
+                            [50, HEIGHT - 160, 50, 20],
+                            [150, HEIGHT - 160, 50, 20],
+                            [250, HEIGHT - 160, 50, 20],
+                            [350, HEIGHT - 160, 50, 20],
+                            [450, HEIGHT - 160, 50, 20],
+                            [550, HEIGHT - 160, 50, 20],
+                            [650, HEIGHT - 160, 50, 20]
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    },
+                    // ステージ25: 新しい地形 - 垂直上昇と狭い足場 (完全再生成)
+                    {
+                        platforms: [
+                            [0, HEIGHT - 20, 100, 20],    // 開始地点
+                            [150, HEIGHT - 100, 60, 20],  // 最初のステップ
+                            [250, HEIGHT - 180, 60, 20],  // 2番目のステップ
+                            [350, HEIGHT - 260, 60, 20],  // 3番目のステップ
+                            [450, HEIGHT - 340, 80, 20],  // 4番目のステップ
+                            [600, HEIGHT - 420, 100, 20]  // 最後の高い足場
+                        ],
+                        spikes: [
+                            [100, HEIGHT - 40, 50, 20],   // 地面の棘
+                            [200, HEIGHT - 120, 50, 20],  // ステップ間の棘
+                            [300, HEIGHT - 200, 50, 20],  // ステップ間の棘
+                            [400, HEIGHT - 280, 50, 20],  // ステップ間の棘
+                            [500, HEIGHT - 360, 50, 20]   // ステップ間の棘
+                        ],
+                        start_pos: new Vec2(50, HEIGHT - PLAYER_START_Y_OFFSET)
+                    }
+                ];
+
+                this.NUM_BASE_PATTERNS = this.BASE_STAGE_PATTERNS.length;
+                this.TOTAL_STAGES = 25;
+
+                this.loadStage(this.currentStageIndex);
+            }
+
+            loadStage(index) {
+                if (index >= this.TOTAL_STAGES) {
+                    gameState = GAME_STATE_CLEAR;
+                    console.log("ゲームクリア！おめでとうございます！");
+                    gameClearScreen.style.display = 'flex';
+                    return;
+                }
+
+                this.currentStageIndex = index;
+                stageDisplay.textContent = `Stage: ${this.currentStageIndex + 1}`;
+                gameClearScreen.style.display = 'none'; // ゲームクリア画面を非表示にする
+
+                const stageConfig = this.BASE_STAGE_PATTERNS[index % this.NUM_BASE_PATTERNS];
+
+                this.platforms = [];
+                this.spikes = [];
+
+                stageConfig.platforms.forEach(p => {
+                    this.platforms.push(new Platform(p[0], p[1], p[2], p[3]));
+                });
+
+                stageConfig.spikes.forEach(s => {
+                    this.spikes.push(new Spike(s[0], s[1], s[2], s[3]));
+                });
+
+                this.player.pos = stageConfig.start_pos.copy();
+                this.player.vel = new Vec2(0, 0);
+                this.player.acc = new Vec2(0, 0);
+                this.player.onGround = false;
+                this.playerStartPosCurrentStage = stageConfig.start_pos.copy();
+            }
+
+            nextStage() {
+                this.loadStage(this.currentStageIndex + 1);
+            }
+
+            resetCurrentStage() {
+                console.log(`リセット！ステージ ${this.currentStageIndex + 1} の最初に戻ります。`);
+                this.player.pos = this.playerStartPosCurrentStage.copy();
+                this.player.vel = new Vec2(0, 0);
+                this.player.acc = new Vec2(0, 0);
+                this.player.onGround = false;
+            }
+        }
+
+        const gameManager = new GameManager();
+        const keysPressed = {};
+
+        // キーボードイベントリスナー
+        document.addEventListener('keydown', (e) => {
+            keysPressed[e.key] = true;
+            if (gameState === GAME_STATE_PLAYING) {
+                if (e.key === 'ArrowUp' || e.key === 'w') {
+                    gameManager.player.jump();
+                }
+                // Shift + Spaceで次のステージへ (デバッグ用)
+                if (e.key === ' ' && e.shiftKey) {
+                    gameManager.nextStage();
+                }
+            } else if (gameState === GAME_STATE_CLEAR) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    gameManager.currentStageIndex = 0;
+                    gameState = GAME_STATE_PLAYING;
+                    gameManager.loadStage(gameManager.currentStageIndex);
+                }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            keysPressed[e.key] = false;
+        });
+
+        // ゲームループ
+        function gameLoop() {
+            if (gameState === GAME_STATE_PLAYING) {
+                // 描画をクリア
+                ctx.clearRect(0, 0, WIDTH, HEIGHT);
+
+                // プレイヤーの更新
+                gameManager.player.update(gameManager.platforms, gameManager.spikes, gameManager, keysPressed);
+
+                // 全てのスプライトを描画
+                gameManager.platforms.forEach(platform => platform.draw());
+                gameManager.spikes.forEach(spike => spike.draw());
+                gameManager.player.draw();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ゲームループを開始
+        gameLoop();
+    </script>
+</body>
+</html>
