@@ -98,6 +98,9 @@
         </div>
     </div>
 
+    <!-- Tone.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -118,6 +121,7 @@
         const GAME_STATE_CLEAR = 1;
 
         let gameState = GAME_STATE_PLAYING;
+        let bgmStarted = false; // Flag to track if BGM has started
 
         // Function to update canvas drawing dimensions
         function updateCanvasDrawingSize() {
@@ -130,6 +134,34 @@
         updateCanvasDrawingSize();
         window.addEventListener('resize', updateCanvasDrawingSize);
 
+        // Tone.js BGM setup
+        const synth = new Tone.Synth().toDestination();
+        const melody = [
+            "C4", "E4", "G4", "C5",
+            "G4", "E4", "C4", null,
+            "D4", "F4", "A4", "D5",
+            "A4", "F4", "D4", null
+        ];
+        const sequence = new Tone.Sequence((time, note) => {
+            if (note) {
+                synth.triggerAttackRelease(note, "8n", time);
+            }
+        }, melody, "4n"); // Play each note for a quarter note duration
+
+        sequence.loop = true;
+        sequence.playbackRate = 1.0; // Normal speed
+
+        function startBGM() {
+            if (!bgmStarted) {
+                // Tone.start() must be called from a user gesture
+                Tone.start().then(() => {
+                    sequence.start(0); // Start the sequence from the beginning
+                    Tone.Transport.start(); // Start the transport (global clock)
+                    bgmStarted = true;
+                    console.log("BGM started!");
+                }).catch(e => console.error("Failed to start Tone.js:", e));
+            }
+        }
 
         class Vec2 {
             constructor(x, y) {
@@ -792,9 +824,10 @@
 
         const gameManager = new GameManager();
         const keysPressed = {};
-        let isMouseDown = false; // Add a flag to track mouse button state
+        let isMouseDown = false;
 
         document.addEventListener('keydown', (e) => {
+            startBGM(); // Try to start BGM on first keydown
             keysPressed[e.key] = true;
             if (gameState === GAME_STATE_PLAYING) {
                 if (e.key === 'ArrowUp' || e.key === 'w') {
@@ -816,8 +849,8 @@
             keysPressed[e.key] = false;
         });
 
-        // Mouse events for control
         canvas.addEventListener('mousedown', (e) => {
+            startBGM(); // Try to start BGM on first mousedown
             e.preventDefault();
             isMouseDown = true;
             if (gameState === GAME_STATE_PLAYING) {
@@ -832,7 +865,7 @@
                     keysPressed['ArrowRight'] = true;
                     keysPressed['ArrowLeft'] = false;
                 }
-                gameManager.player.jump(); // Jump on click
+                gameManager.player.jump();
             } else if (gameState === GAME_STATE_CLEAR) {
                 gameManager.currentStageIndex = 0;
                 gameState = GAME_STATE_PLAYING;
@@ -866,8 +899,8 @@
             }
         });
 
-        // Touch events for control
         canvas.addEventListener('touchstart', (e) => {
+            startBGM(); // Try to start BGM on first touchstart
             e.preventDefault();
             if (gameState === GAME_STATE_PLAYING) {
                 const touchX = e.touches[0].clientX;
@@ -917,8 +950,7 @@
 
         function gameLoop() {
             if (gameState === GAME_STATE_PLAYING) {
-                // Clear the canvas with the background color
-                ctx.fillStyle = '#87CEEB'; // Sky blue background
+                ctx.fillStyle = '#87CEEB';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
                 gameManager.player.update(gameManager.platforms, gameManager.spikes, gameManager, keysPressed);
