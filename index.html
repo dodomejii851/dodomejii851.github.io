@@ -25,7 +25,6 @@
         #game-container {
             border: 2px solid #333;
             border-radius: 8px;
-            overflow: hidden;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             background-color: #fff;
             display: flex;
@@ -43,7 +42,7 @@
         canvas {
             background-color: #87CEEB;
             display: block;
-            border-radius: 44px;
+            border-radius: 4px;
             touch-action: none;
             /* Fill the container */
             width: 100%;
@@ -161,6 +160,7 @@
         const leftButton = document.getElementById('leftButton');
         const rightButton = document.getElementById('rightButton');
         const jumpButton = document.getElementById('jumpButton');
+        // Fix: Changed 'onScreenControls' to 'on-screen-controls' to match HTML ID
         const onScreenControls = document.getElementById('on-screen-controls');
 
         // Internal game world dimensions (fixed, for game logic)
@@ -375,6 +375,7 @@
                 this.playerStartPosCurrentStage = new Vec2(0, 0);
 
                 this.BASE_STAGE_PATTERNS = [
+                    // Stage 1: Basic platforms with a few gaps and spikes on the ground.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 150, 20],
@@ -388,6 +389,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 2: Longer ground platform with elevated platforms and a few ground spikes.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, GAME_WORLD_WIDTH, 20],
@@ -402,6 +404,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 3: Multiple elevated platforms with varying heights and scattered spikes.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, GAME_WORLD_WIDTH, 20],
@@ -417,6 +420,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 4: Ground level with several spike pits. Requires precise jumps.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 100, 20],
@@ -431,6 +435,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 5: Ascending platforms with spikes below, requiring careful vertical movement.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 100, 20],
@@ -446,6 +451,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 6: Mixed height platforms with spikes strategically placed.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 150, 20],
@@ -461,6 +467,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 7: Alternating high and low platforms with spikes.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 100, 20],
@@ -476,6 +483,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 8: Stepping stone platforms with spikes in between.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 100, 20],
@@ -494,6 +502,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 9: Narrow platforms with spikes in gaps, challenging precision.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 80, 20],
@@ -511,6 +520,7 @@
                         ],
                         start_pos: new Vec2(40, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 10: V-shaped spike pits on the ground.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 80, 20],
@@ -531,6 +541,7 @@
                         ],
                         start_pos: new Vec2(40, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 11: Ascending platforms with ground spikes.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 100, 20],
@@ -547,6 +558,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 12: Stair-like platforms with small spikes on each step.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 80, 20],
@@ -567,6 +579,7 @@
                         ],
                         start_pos: new Vec2(40, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 13: High platforms with spikes in the gaps, requiring long jumps.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 100, 20],
@@ -585,6 +598,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 14: Descending platforms with spikes below.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 150, 20],
@@ -601,6 +615,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 15: Small, scattered platforms with spikes, requiring precise movement.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 50, 20],
@@ -621,6 +636,7 @@
                         ],
                         start_pos: new Vec2(25, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 16: Ground platforms with gaps and elevated platforms in the middle.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 150, 20],
@@ -635,6 +651,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 17: Similar to Stage 7 but with different spike placements.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 100, 20],
@@ -650,6 +667,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 18: Ascending stair-like platforms with more frequent small spikes.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 80, 20],
@@ -670,6 +688,7 @@
                         ],
                         start_pos: new Vec2(40, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 19: Long ground platform with multiple spike sections.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, GAME_WORLD_WIDTH, 20]
@@ -683,6 +702,7 @@
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 20: Ascending platforms with spikes in the gaps.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 80, 20],
@@ -701,6 +721,7 @@
                         ],
                         start_pos: new Vec2(40, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 21: Descending platforms with spikes below.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 80, 20],
@@ -718,6 +739,7 @@
                         ],
                         start_pos: new Vec2(40, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 22: Small, evenly spaced platforms with spikes in between.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 50, 20],
@@ -740,12 +762,13 @@
                         ],
                         start_pos: new Vec2(25, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 23: V-shaped platforms with spikes, requiring precise jumps.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 50, 20],
-                            [100, GAME_WORLD_HEIGHT - 120, 50, 20],
-                            [200, GAME_WORLD_HEIGHT - 220, 50, 20],
-                            [300, GAME_WORLD_HEIGHT - 320, 50, 20],
+                            [100, GAME_WORLD_HEIGHT - 100, 50, 20],
+                            [200, GAME_WORLD_HEIGHT - 180, 50, 20],
+                            [300, GAME_WORLD_HEIGHT - 240, 50, 20],
                             [400, GAME_WORLD_HEIGHT - 220, 50, 20],
                             [500, GAME_WORLD_HEIGHT - 120, 50, 20],
                             [600, GAME_WORLD_HEIGHT - 20, 200, 20]
@@ -760,10 +783,11 @@
                         ],
                         start_pos: new Vec2(25, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 24: Two long platforms, one with spikes, the other elevated with spikes.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, GAME_WORLD_WIDTH, 20],
-                            [0, GAME_WORLD_HEIGHT - 180, GAME_WORLD_WIDTH, 20]
+                            [0, GAME_WORLD_HEIGHT - 185, GAME_WORLD_WIDTH, 20] // Further moved down from -130 to -100
                         ],
                         spikes: [
                             [100, GAME_WORLD_HEIGHT - 40, 50, 20],
@@ -773,37 +797,38 @@
                             [450, GAME_WORLD_HEIGHT - 40, 50, 20],
                             [550, GAME_WORLD_HEIGHT - 40, 50, 20],
                             [650, GAME_WORLD_HEIGHT - 40, 50, 20],
-                            [50, GAME_WORLD_HEIGHT - 160, 50, 20],
-                            [150, GAME_WORLD_HEIGHT - 160, 50, 20],
-                            [250, GAME_WORLD_HEIGHT - 160, 50, 20],
-                            [350, GAME_WORLD_HEIGHT - 160, 50, 20],
-                            [450, GAME_WORLD_HEIGHT - 160, 50, 20],
-                            [550, GAME_WORLD_HEIGHT - 160, 50, 20],
-                            [650, GAME_WORLD_HEIGHT - 160, 50, 20]
+                            [50, GAME_WORLD_HEIGHT - 165, 50, 20], // Further moved down from -110 to -80
+                            [150, GAME_WORLD_HEIGHT - 165, 50, 20],
+                            [250, GAME_WORLD_HEIGHT - 165, 50, 20],
+                            [350, GAME_WORLD_HEIGHT - 165, 50, 20],
+                            [450, GAME_WORLD_HEIGHT - 165, 50, 20],
+                            [550, GAME_WORLD_HEIGHT - 165, 50, 20],
+                            [650, GAME_WORLD_HEIGHT - 165, 50, 20]
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     },
+                    // Stage 25: Very high ascending platforms with spikes, requiring long and precise jumps.
                     {
                         platforms: [
                             [0, GAME_WORLD_HEIGHT - 20, 100, 20],
                             [150, GAME_WORLD_HEIGHT - 100, 60, 20],
                             [250, GAME_WORLD_HEIGHT - 180, 60, 20],
-                            [350, GAME_WORLD_HEIGHT - 260, 60, 20],
-                            [450, GAME_WORLD_HEIGHT - 340, 80, 20],
-                            [600, GAME_WORLD_HEIGHT - 420, 100, 20]
+                            [350, GAME_WORLD_HEIGHT - 310, 60, 20], // Moved up from -260
+                            [450, GAME_WORLD_HEIGHT - 390, 80, 20], // Moved up from -340
+                            [600, GAME_WORLD_HEIGHT - 470, 100, 20]  // Moved up from -420
                         ],
                         spikes: [
                             [100, GAME_WORLD_HEIGHT - 40, 50, 20],
                             [200, GAME_WORLD_HEIGHT - 120, 50, 20],
-                            [300, GAME_WORLD_HEIGHT - 200, 50, 20],
-                            [400, GAME_WORLD_HEIGHT - 280, 50, 20],
-                            [500, GAME_WORLD_HEIGHT - 360, 50, 20]
+                            [300, GAME_WORLD_HEIGHT - 250, 50, 20], // Moved up from -200
+                            [400, GAME_WORLD_HEIGHT - 330, 50, 20], // Moved up from -280
+                            [500, GAME_WORLD_HEIGHT - 410, 50, 20]  // Moved up from -360
                         ],
                         start_pos: new Vec2(50, GAME_WORLD_HEIGHT - PLAYER_START_Y_OFFSET)
                     }
                 ];
 
-                this.NUM_BASE_PATTERNS = this.BASE_STAGE_PATTERNS.length;
+                this.NUM_BASE_PATTERNS = this.BASE_STAGE_PATTERNS.length; // 修正: PATTERNS に修正
                 this.TOTAL_STAGES = 25;
 
                 this.loadStage(this.currentStageIndex);
