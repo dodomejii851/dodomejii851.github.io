@@ -79,7 +79,7 @@ let SEARCH_DEPTH = 5;
 // load persisted depth if available (number between 1 and 8)
 try{
   const stored = parseInt(localStorage.getItem('ai_search_depth') || '', 10);
-  if(!isNaN(stored) && stored >= 1 && stored <= 8) SEARCH_DEPTH = stored;
+  if(!isNaN(stored) && stored >= 1 && stored <= 20) SEARCH_DEPTH = stored;
 }catch(e){ }
 // Worker pool for parallel evaluation (Web Worker)
 let WORKER_COUNT = 1;
@@ -2085,3 +2085,4 @@ function openKifuListInline(){
 }
 
 window.addEventListener('keydown', (e)=>{ if(e.key==='p' || e.key==='P'){ openKifuListInline(); } });
+
