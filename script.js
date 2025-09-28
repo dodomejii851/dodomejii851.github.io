@@ -827,6 +827,18 @@ function showUserIdBadge(){ try{
     }
     const txt = document.getElementById('user-id-badge-text'); if(txt) txt.textContent = 'ユーザーID: ' + uid;
   }catch(e){ console.warn('showUserIdBadge failed', e); } }
+
+// add a persistent rematch button into the kifu-controls area
+function ensureRematchButton(){ try{
+  const controls = document.getElementById('kifu-controls'); if(!controls) return;
+  if(document.getElementById('rematch-btn')) return; // already added
+  const btn = document.createElement('button'); btn.id = 'rematch-btn'; btn.textContent = '再戦'; btn.title = '新しく対局を開始します';
+  btn.style.marginLeft = '6px'; btn.onclick = ()=>{ resetGame(); };
+  controls.appendChild(btn);
+}catch(e){ console.warn('ensureRematchButton failed', e); }}
+
+// call once at load
+try{ window.addEventListener('load', ()=>{ ensureRematchButton(); showUserIdBadge(); }); }catch(e){}
 // Compression and hashing helpers
 async function compressStringToBase64(input){
   try{
@@ -1134,11 +1146,14 @@ function handleMove(fromRow, fromCol, toRow, toCol) {
   const piece = boardState[fromRow][fromCol];
   const targetBefore = boardState[toRow][toCol];
 
-  // If this was a human move (white), record SAN now.
+  // If this was a human move, record SAN now. (Support black being human via blackIsAI flag)
   try{
-    if (currentTurn === 'white'){
+    const isHumanMove = (currentTurn === 'white') || (currentTurn === 'black' && !blackIsAI);
+    if (isHumanMove){
       const san = formatMove(piece, {row:fromRow,col:fromCol}, {row:toRow,col:toCol}, { target: targetBefore });
-      appendMoveToKifu(san);
+  // appendMoveToKifu: for human black moves store as {player:true} so we can mark them in UI
+  const asBlack = (currentTurn === 'black');
+  if (asBlack) appendMoveToKifu(san, { player: true }); else appendMoveToKifu(san, false);
     }
   }catch(e){/* ignore formatting errors */}
 
@@ -1184,44 +1199,68 @@ function handleMove(fromRow, fromCol, toRow, toCol) {
 // --- プロモーションUI ---
 function showPromotionUI(row, col, color, opts) {
   // opts may include: from (pos), piece (moving piece), targetBefore (captured piece)
+  // remove any existing promotion UI first to avoid duplicates
+  const prev = document.getElementById('promotion-ui'); if(prev && prev.parentNode) prev.parentNode.removeChild(prev);
+
   const ui = document.createElement("div");
   ui.id = "promotion-ui";
   ui.style.position = "absolute";
-  // try to position over the target square; if board is scaled use fallback centering
+  ui.style.zIndex = 99999;
+  ui.style.display = 'flex'; ui.style.gap = '6px'; ui.style.background = 'rgba(0,0,0,0.6)'; ui.style.padding = '6px'; ui.style.borderRadius = '8px'; ui.style.alignItems = 'center'; ui.style.backdropFilter = 'blur(4px)';
+
+  // compute absolute page coordinates for the center of the target square so we can append to document.body
   const board = document.getElementById("board");
-  const squareSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--square-size')) || 60;
-  ui.style.top = `${row * squareSize}px`;
-  ui.style.left = `${col * squareSize}px`;
-  ui.style.display = 'flex'; ui.style.gap = '6px'; ui.style.background = 'rgba(0,0,0,0.35)'; ui.style.padding = '6px'; ui.style.borderRadius = '6px';
+  let squareSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--square-size')) || 60;
+  let boardRect = null;
+  try{
+    boardRect = board ? board.getBoundingClientRect() : null;
+    if(boardRect && boardRect.width) squareSize = boardRect.width / 8;
+  }catch(e){ boardRect = null; }
+
+  let centerX = window.scrollX + (col + 0.5) * squareSize; // fallback if boardRect missing
+  let centerY = window.scrollY + (row + 0.5) * squareSize;
+  if (boardRect){
+    centerX = window.scrollX + boardRect.left + (col + 0.5) * squareSize;
+    centerY = window.scrollY + boardRect.top + (row + 0.5) * squareSize;
+  }
+  ui.style.left = `${centerX}px`;
+  ui.style.top = `${centerY}px`;
+  ui.style.transform = 'translate(-50%, -120%)'; // place slightly above center of square
+  console.log('[PROMO] showPromotionUI', {row,col,color,squareSize,centerX,centerY,boardRect: !!boardRect});
 
   const choices = ["Q","R","B","N"];
   choices.forEach(type=>{
     const btn=document.createElement("button");
     btn.className = 'promo-btn';
-    const img=document.createElement("img");
-    img.src=getPieceImage(color==="white"?type:type.toLowerCase());
-    img.className="piece";
-    img.style.width = '36px'; img.style.height = '36px'; img.style.pointerEvents='none';
+  const img=document.createElement("img");
+  img.src=getPieceImage(color==="white"?type:type.toLowerCase());
+  img.className="promo-piece"; // avoid .piece absolute positioning used on board pieces
+  img.style.width = '36px'; img.style.height = '36px'; img.style.pointerEvents='none';
     btn.appendChild(img);
     btn.onclick=()=>{
+      // prevent double clicks: disable all promo buttons immediately
+      const allBtns = ui.querySelectorAll('.promo-btn'); allBtns.forEach(b=>b.disabled=true);
       // set promoted piece on board
       boardState[row][col] = color==="white"?type:type.toLowerCase();
       // if opts provided, finalize the move: record SAN, lastMove, flip turn, animate already happened before showing UI
       if(opts && opts.from){
-        try{ const san = formatMove(opts.piece, opts.from, {row,col}, { target: opts.targetBefore, promotion: type }); appendMoveToKifu(san); }catch(e){}
+        try{
+          const san = formatMove(opts.piece, opts.from, {row,col}, { target: opts.targetBefore, promotion: type });
+          const isBlackHuman = (getColor(opts.piece)==='black' && !blackIsAI);
+          if (isBlackHuman) appendMoveToKifu(san, { player: true }); else appendMoveToKifu(san, getColor(opts.piece)==='black');
+        }catch(e){}
         lastMove = { from: opts.from, to: { row, col } };
         currentTurn = oppositeColor(color);
       }
-      if (board.contains(ui)) board.removeChild(ui);
+      if (ui && ui.parentNode) ui.parentNode.removeChild(ui);
       renderBoard();
   checkForCheckOrMate();
   maybeScheduleBlackAI(500);
     };
     ui.appendChild(btn);
   });
-  // remove any existing promotion UI first
-  const prev = document.getElementById('promotion-ui'); if(prev && prev.parentNode) prev.parentNode.removeChild(prev);
-  if(board) board.appendChild(ui);
+  // append to body so it's not clipped by board overflow
+  document.body.appendChild(ui);
 }
 
 // --- 合法手生成（ポーン・ナイトのみ簡易版） ---
@@ -1586,17 +1625,19 @@ function coord(pos) {
 function generatePGN() {
   const today = new Date().toISOString().slice(0,10);
   let header = `[Event "?"]\n[Site "?"]\n[Date "${today}"]\n[Round "?"]\n[White "White"]\n[Black "Black"]\n[Result "*"]\n\n`;
+  function sanOf(v){ if(!v) return ''; if(typeof v === 'object') return v.san || ''; return v; }
   const movesStr = moveList.map((m,i)=>{
     const num = i+1;
-    const white = m.white ? m.white : '';
-    const black = m.black ? ' ' + m.black : '';
+    const white = sanOf(m.white) ? sanOf(m.white) : '';
+    const black = sanOf(m.black) ? ' ' + sanOf(m.black) : '';
     return `${num}. ${white}${black}`;
   }).join(' ');
   return header + movesStr + ' *';
 }
 
 function generateTXT() {
-  return moveList.map((m,i)=>`${i+1}. ${m.white||''} ${m.black||''}`).join('\n');
+  function sanOf(v){ if(!v) return ''; if(typeof v === 'object') return v.san || ''; return v; }
+  return moveList.map((m,i)=>`${i+1}. ${sanOf(m.white)||''} ${sanOf(m.black)||''}`).join('\n');
 }
 
 function downloadText(filename, text) {
@@ -1624,17 +1665,24 @@ window.addEventListener('load', ()=>{
   setupKifuDownloadButtons();
 });
 
-function appendMoveToKifu(san, isAI=false) {
-  if (isAI) {
-    // 黒手: 完成された手番（先手手番の番号を補完）
+function appendMoveToKifu(san, where=false) {
+  // where: false => white; true => black (AI or default string); object {player:true} => black player-marked
+  if (where === true) {
+    // black (AI or generic)
     if (moveList.length === 0 || moveList[moveList.length-1].black) {
-      // 先手の手番がnullなら空で追加
       moveList.push({white: null, black: san});
     } else {
       moveList[moveList.length-1].black = san;
     }
+  } else if (where && typeof where === 'object' && where.player) {
+    // black move made by human player: store object so we can mark it in UI
+    if (moveList.length === 0 || moveList[moveList.length-1].black) {
+      moveList.push({white: null, black: { san: san, player: true }});
+    } else {
+      moveList[moveList.length-1].black = { san: san, player: true };
+    }
   } else {
-    // 白手: 新しい手番を追加
+    // white
     moveList.push({white: san, black: null});
   }
   renderKifu();
@@ -1643,9 +1691,10 @@ function appendMoveToKifu(san, isAI=false) {
 function renderKifu() {
   const el = document.getElementById('moves');
   if (!el) return;
+  function displaySan(v){ if(!v) return ''; if(typeof v === 'object') return (v.san || '') + (v.player? ' p':''); return v; }
   el.textContent = moveList.map((m,i)=>{
     const num = i+1;
-    return `${num}. ${m.white || ''} ${m.black || ''}`;
+    return `${num}. ${displaySan(m.white) || ''} ${displaySan(m.black) || ''}`;
   }).join('\n');
 }
 
