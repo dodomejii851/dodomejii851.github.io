@@ -97,7 +97,7 @@ function createWorkers(count){ // terminate existing
   }
 }
 
-function setWorkerCount(n){ n = Math.max(1, Math.min(8, n)); WORKER_COUNT = n; try{ localStorage.setItem('ai_worker_cores', String(n)); }catch(e){} createWorkers(n); const el=document.getElementById('ai-log'); if(el) el.textContent += `[設定] 使用コア数を ${n} に設定しました\n`; }
+function setWorkerCount(n){ n = Math.max(1, Math.min(20, n)); WORKER_COUNT = n; try{ localStorage.setItem('ai_worker_cores', String(n)); }catch(e){} createWorkers(n); const el=document.getElementById('ai-log'); if(el) el.textContent += `[設定] 使用コア数を ${n} に設定しました\n`; }
 
 // create initial pool
 createWorkers(WORKER_COUNT);
@@ -2085,4 +2085,5 @@ function openKifuListInline(){
 }
 
 window.addEventListener('keydown', (e)=>{ if(e.key==='p' || e.key==='P'){ openKifuListInline(); } });
+
 
