@@ -1,1 +1,78 @@
-<!DOCTYPE html><html lang="ja"><head>  <meta charset="UTF-8" />  <meta name="viewport" content="width=device-width, initial-scale=1">   <title>チェス</title>  <link rel="stylesheet" href="style.css"></head><body>  <div id="main">    <div id="ai-log">AIの思考ログ</div>    <div id="board"></div>    <div id="kifu-column">      <div id="captured-area">        <div class="captured-label">駒</div>        <div class="captured-row">          <span class="cap-title">白：</span>          <span id="captured-white" class="captured-row-items" aria-label="白が取った駒"></span>        </div>        <div class="captured-row">          <span class="cap-title">黒：</span>          <span id="captured-black" class="captured-row-items" aria-label="黒が取った駒"></span>        </div>      </div>      <div id="kifu">        <div class="kifu-title">棋譜</div>        <div id="moves"></div>        <div class="responsive-hint">白:あなた 黒:AI</div>      </div>      <div id="kifu-controls">        <button id="download-pgn">PGNでダウンロード</button>        <button id="download-txt">TXTでダウンロード</button>  <!-- Castling quick buttons (removed) -->        <div id="search-depth-control" style="margin-top:8px;display:flex;align-items:center;gap:8px;">          <label for="search-depth-input" style="font-size:13px;">探索深さ:</label>          <input id="search-depth-input" type="number" min="1" max="8" step="1" style="width:64px;padding:4px" title="AIの探索深さを設定します。既定は5です。" />          <small style="font-size:12px;color:#666">深さが大きいほど思考に時間がかかります。</small>        </div>        <div id="search-cores-control" style="margin-top:6px;display:flex;align-items:center;gap:8px;">          <label for="search-cores-input" style="font-size:13px;">使用コア数:</label>          <input id="search-cores-input" type="number" min="1" max="8" step="1" style="width:64px;padding:4px" title="AIが使うワーカースレッド数（Web Worker）を指定します。既定は1です。" />          <small id="cores-note" style="font-size:12px;color:#666">※Web Worker を使用します</small>        </div>        <div id="manual-pgn" style="margin-top:8px;">          <input id="pgn-input" placeholder="例: e4, Nf3, O-O, exd5, e8=Q" style="width:160px;padding:4px" />          <button id="pgn-go">白として適用</button>        </div>        <div id="display-mode-control" style="margin-top:8px;display:flex;align-items:center;gap:8px;">          <label for="display-mode-select" style="font-size:13px;">表示モード:</label>          <select id="display-mode-select" title="表示モードを選択 (自動/デスクトップ/モバイル)">            <option value="auto">自動</option>            <option value="desktop">デスクトップ</option>            <option value="mobile">モバイル</option>          </select>          <small style="font-size:12px;color:#666">自動はウィンドウ状態や端末に応じて切替</small>        </div>        <div id="browser-info" style="margin-top:8px;font-size:13px;color:#333;background:#fafafa;border:1px solid #eee;padding:8px;border-radius:6px;">          <div style="font-weight:600;margin-bottom:6px;">ブラウザ情報（読み取りのみ）</div>          <div id="browser-details" style="font-size:12px;color:#444;line-height:1.4;margin-bottom:6px;"></div>          <div style="display:flex;gap:8px;align-items:center;">            <input id="ua-override-input" placeholder="Override userAgent (for page only)" style="flex:1;padding:6px;font-size:12px;" />            <button id="ua-apply">適用</button>            <button id="ua-clear">クリア</button>          </div>          <div style="font-size:11px;color:#666;margin-top:6px;">注: UA の上書きはこのページ内の判定にのみ使われ、実際のブラウザのヘッダーや別タブには影響しません。</div>        </div>      </div>    </div>  </div>    <div id="game-message" aria-live="polite"></div>  <script src="script.js"></script></body></html>
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>チェス - AI対戦</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header style="text-align: center; padding: 20px 0; color: white;">
+    <h1 style="margin: 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">♗ チェス AI対戦 ♗</h1>
+    <p style="margin: 5px 0 0 0; opacity: 0.9;">AIと対戦するチェスゲーム - HTML, CSS, JSで作成</p>
+  </header>
+  
+  <div id="main">
+    <div id="ai-log">AIの思考ログ</div>
+    <div id="board"></div>
+    <div id="kifu-column">
+      <div id="captured-area">
+        <div class="captured-label">駒</div>
+        <div class="captured-row">
+          <span class="cap-title">白：</span>
+          <span id="captured-white" class="captured-row-items" aria-label="白が取った駒"></span>
+        </div>
+        <div class="captured-row">
+          <span class="cap-title">黒：</span>
+          <span id="captured-black" class="captured-row-items" aria-label="黒が取った駒"></span>
+        </div>
+      </div>
+      <div id="kifu">
+        <div class="kifu-title">棋譜</div>
+        <div id="moves"></div>
+        <div class="responsive-hint">白:あなた 黒:AI</div>
+      </div>
+      <div id="kifu-controls">
+        <button id="download-pgn">PGNでダウンロード</button>
+        <button id="download-txt">TXTでダウンロード</button>
+        <div id="search-depth-control" style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+          <label for="search-depth-input" style="font-size:13px;">探索深さ:</label>
+          <input id="search-depth-input" type="number" min="1" max="8" step="1" style="width:64px;padding:4px" title="AIの探索深さを設定します。既定は5です。" />
+          <small style="font-size:12px;color:#666">深さが大きいほど思考に時間がかかります。</small>
+        </div>
+        <div id="search-cores-control" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+          <label for="search-cores-input" style="font-size:13px;">使用コア数:</label>
+          <input id="search-cores-input" type="number" min="1" max="8" step="1" style="width:64px;padding:4px" title="AIが使うワーカースレッド数（Web Worker）を指定します。既定は1です。" />
+          <small id="cores-note" style="font-size:12px;color:#666">※Web Worker を使用します</small>
+        </div>
+        <div id="manual-pgn" style="margin-top:8px;">
+          <input id="pgn-input" placeholder="例: e4, Nf3, O-O, exd5, e8=Q" style="width:160px;padding:4px" />
+          <button id="pgn-go">白として適用</button>
+        </div>
+        <div id="display-mode-control" style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+          <label for="display-mode-select" style="font-size:13px;">表示モード:</label>
+          <select id="display-mode-select" title="表示モードを選択 (自動/デスクトップ/モバイル)">
+            <option value="auto">自動</option>
+            <option value="desktop">デスクトップ</option>
+            <option value="mobile">モバイル</option>
+          </select>
+          <small style="font-size:12px;color:#666">自動はウィンドウ状態や端末に応じて切替</small>
+        </div>
+        <div id="browser-info" style="margin-top:8px;font-size:13px;color:#333;background:#fafafa;border:1px solid #eee;padding:8px;border-radius:6px;">
+          <div style="font-weight:600;margin-bottom:6px;">ブラウザ情報（読み取りのみ）</div>
+          <div id="browser-details" style="font-size:12px;color:#444;line-height:1.4;margin-bottom:6px;"></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input id="ua-override-input" placeholder="Override userAgent (for page only)" style="flex:1;padding:6px;font-size:12px;" />
+            <button id="ua-apply">適用</button>
+            <button id="ua-clear">クリア</button>
+          </div>
+          <div style="font-size:11px;color:#666;margin-top:6px;">注: UA の上書きはこのページ内の判定にのみ使われ、実際のブラウザのヘッダーや別タブには影響しません。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="game-message" aria-live="polite"></div>
+  <script src="script.js"></script>
+</body>
+</html>

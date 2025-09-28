@@ -23,14 +23,14 @@
         }
 
         #game-container {
-            border: 2px solid #333;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            background-color: #fff;
+            border: 3px solid #2d3748;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+            background: linear-gradient(145deg, #ffffff, #f7fafc);
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 10px;
+            padding: 15px;
             /* Responsive sizing */
             width: 90vw; /* Take up 90% of viewport width */
             max-width: 800px; /* But not larger than original game width */
@@ -105,26 +105,27 @@
         }
 
         .control-button {
-            background-color: rgba(0, 0, 0, 0.5);
+            background: linear-gradient(145deg, #4a5568, #2d3748);
             color: white;
-            border: 2px solid #fff;
+            border: 3px solid #ffffff;
             border-radius: 50%; /* Make them round */
-            width: 70px; /* Size for touch targets */
-            height: 70px;
+            width: 75px; /* Size for touch targets */
+            height: 75px;
             font-size: 1.8em;
             font-weight: bold;
             display: flex;
             justify-content: center;
             align-items: center;
             cursor: pointer;
-            transition: background-color 0.1s ease, transform 0.1s ease;
+            transition: all 0.2s ease;
             -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.2);
         }
 
         .control-button:active {
-            background-color: rgba(0, 0, 0, 0.8);
-            transform: scale(0.95);
+            background: linear-gradient(145deg, #2d3748, #1a202c);
+            transform: scale(0.95) translateY(2px);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.1);
         }
     </style>
 </head>
@@ -1099,6 +1100,20 @@
         }
 
         gameLoop();
+        
+        // JavaScript enhancement: Dynamic title update to show JS editing capability
+        let titleBlink = false;
+        setInterval(() => {
+            const stageDisplay = document.getElementById('stage-display');
+            if (stageDisplay) {
+                titleBlink = !titleBlink;
+                stageDisplay.style.color = titleBlink ? '#4a5568' : '#2d3748';
+                stageDisplay.style.textShadow = titleBlink ? '0 0 8px rgba(74, 85, 104, 0.5)' : 'none';
+            }
+        }, 1500);
+        
+        // Add a console message to show JavaScript editing capability
+        console.log('✅ プラットフォームゲーム: JavaScript編集機能が動作中 - タイトルアニメーション追加');
     </script>
 </body>
 </html>

@@ -2036,3 +2036,31 @@ function openKifuListInline(){
 }
 
 window.addEventListener('keydown', (e)=>{ if(e.key==='p' || e.key==='P'){ openKifuListInline(); } });
+
+// JavaScript enhancement: Welcome message and editing demonstration
+window.addEventListener('load', () => {
+  // Show that JavaScript can be edited by adding a dynamic feature
+  const header = document.querySelector('header p');
+  if (header) {
+    // Create a rotating message that shows HTML, CSS, JS can be edited
+    const messages = [
+      'AIと対戦するチェスゲーム - HTML, CSS, JSで作成',
+      'HTML ✓ 編集可能 - 構造を自由に変更',
+      'CSS ✓ 編集可能 - スタイルを自由にカスタマイズ',
+      'JavaScript ✓ 編集可能 - 機能を自由に追加'
+    ];
+    
+    let messageIndex = 0;
+    setInterval(() => {
+      messageIndex = (messageIndex + 1) % messages.length;
+      header.textContent = messages[messageIndex];
+      header.style.transition = 'opacity 0.3s ease';
+      header.style.opacity = '0.7';
+      setTimeout(() => {
+        header.style.opacity = '0.9';
+      }, 150);
+    }, 3000);
+  }
+  
+  console.log('✅ JavaScript編集機能のデモンストレーション: メッセージローテーション機能が追加されました');
+});
